@@ -65,24 +65,68 @@ async function detectAuctionIdFromActiveTab() {
   }
 }
 
-function currentAmounts() {
-  const action = $("actionSelect").value;
-  const maxTotal = Number($("maxTotalInput").value || 0);
-  if (action === "PLACE_BID") {
-    return { action, maxBid: Number($("maxBidInput").value || 0), maxTotal };
-  }
-  return { action, maxItemPrice: Number($("maxItemPriceInput").value || 0), maxTotal };
+function currentFormState() {
+  return {
+    action: $("actionSelect").value,
+    maxBid: Number($("maxBidInput").value || 0),
+    maxItemPrice: Number($("maxItemPriceInput").value || 0),
+    maxTotal: Number($("maxTotalInput").value || 0),
+    tradeRef: $("tradeRefInput").value.trim(),
+    deliveryMethod: $("deliveryMethodInput").value.trim(),
+    paymentMethod: $("paymentMethodInput").value.trim(),
+    authorizePayment: $("authorizePaymentCheckbox").checked,
+  };
+}
+
+function collectAddress() {
+  const address = {
+    recipient_name: $("addrRecipientName").value.trim(),
+    postal_code: $("addrPostalCode").value.trim(),
+    prefecture: $("addrPrefecture").value.trim(),
+    city_line: $("addrCityLine").value.trim(),
+    phone: $("addrPhone").value.trim(),
+  };
+  const hasAny = Object.values(address).some((v) => v);
+  return hasAny ? address : null;
+}
+
+function isAddressComplete(address) {
+  return Boolean(
+    address && address.recipient_name && address.postal_code && address.prefecture && address.city_line && address.phone
+  );
+}
+
+// Chỉ hiện trường phù hợp action đang có preview hợp lệ (mục 7: mỗi
+// action có schema riêng, từ chối trường lạ).
+function updateFieldVisibilityForAction(action) {
+  $("bidFields").hidden = action !== "PLACE_BID";
+  $("buyNowFields").hidden = action !== "BUY_NOW";
+  $("tradeRefFields").hidden = action !== "PAY_WON_ITEM";
+  $("paymentMethodFields").hidden = !(action === "STORE_CHECKOUT" || action === "PAY_WON_ITEM");
+  $("deliveryMethodRow").hidden = action !== "STORE_CHECKOUT";
+  $("addressFields").hidden = !(action === "STORE_CHECKOUT" || action === "PAY_WON_ITEM");
+  $("authorizePaymentRow").hidden = action !== "STORE_CHECKOUT";
 }
 
 function updateConfirmButtonLabel() {
   const dryRun = $("dryRunCheckbox").checked;
-  const { action, maxBid, maxTotal } = currentAmounts();
+  const form = currentFormState();
   const prefix = dryRun ? "[DRY-RUN] " : "";
   let label;
-  if (action === "PLACE_BID") {
-    label = `${prefix}Đặt giá tối đa ${maxBid || "?"} JPY qua VPS`;
+  if (form.action === "PLACE_BID") {
+    label = `${prefix}Đặt giá tối đa ${form.maxBid || "?"} JPY qua VPS`;
+  } else if (form.action === "BUY_NOW") {
+    // Mua ngay không tự bao gồm thanh toán trong hệ thống này — thanh
+    // toán là lệnh PAY_WON_ITEM riêng (mục 11).
+    label = `${prefix}Mua ngay tối đa ${form.maxTotal || "?"} JPY qua VPS`;
+  } else if (form.action === "STORE_CHECKOUT") {
+    label = form.authorizePayment
+      ? `${prefix}Mua và thanh toán tối đa ${form.maxTotal || "?"} JPY qua VPS`
+      : `${prefix}Mua tối đa ${form.maxTotal || "?"} JPY qua VPS (chưa cấp quyền thanh toán)`;
+  } else if (form.action === "PAY_WON_ITEM") {
+    label = `${prefix}Thanh toán tối đa ${form.maxTotal || "?"} JPY qua VPS`;
   } else {
-    label = `${prefix}Mua và thanh toán tối đa ${maxTotal || "?"} JPY qua VPS`;
+    label = `${prefix}Xác nhận qua VPS`;
   }
   $("confirmButton").textContent = label;
 }
@@ -101,9 +145,7 @@ function renderPreview(preview) {
   $("previewExpiresAt").textContent = preview.expires_at;
   $("previewBox").hidden = false;
 
-  const isBid = preview.action === "PLACE_BID";
-  $("bidFields").hidden = !isBid;
-  $("buyNowFields").hidden = isBid;
+  updateFieldVisibilityForAction(preview.action);
   updateConfirmButtonLabel();
 }
 
@@ -213,7 +255,8 @@ async function handleConfirm() {
 
   const state = await sendMessage("GET_STATE", {});
   const dryRun = $("dryRunCheckbox").checked;
-  const { action, maxBid, maxItemPrice, maxTotal } = currentAmounts();
+  const form = currentFormState();
+  const address = collectAddress();
 
   const intentId = crypto.randomUUID();
   const idempotencyKey = crypto.randomUUID();
@@ -223,18 +266,37 @@ async function handleConfirm() {
     account_id: state.accountId,
     auction_id: currentPreview.auction_id,
     preview_id: currentPreview.preview_id,
-    action,
+    action: form.action,
     currency: "JPY",
     unknown_cost_policy: "BLOCK",
     expires_in_seconds: 120,
     dry_run: dryRun,
+    max_total_jpy: form.maxTotal,
   };
-  if (action === "PLACE_BID") {
-    payload.max_bid_jpy = maxBid;
-    payload.max_total_jpy = maxTotal;
-  } else {
-    payload.max_item_price_jpy = maxItemPrice;
-    payload.max_total_jpy = maxTotal;
+
+  if (form.action === "PLACE_BID") {
+    payload.max_bid_jpy = form.maxBid;
+  } else if (form.action === "BUY_NOW") {
+    payload.max_item_price_jpy = form.maxItemPrice;
+  } else if (form.action === "STORE_CHECKOUT") {
+    if (!isAddressComplete(address)) {
+      $("confirmError").textContent = "Cần nhập đủ địa chỉ giao hàng cho STORE_CHECKOUT";
+      $("confirmError").hidden = false;
+      return;
+    }
+    payload.address = address;
+    payload.delivery_method = form.deliveryMethod;
+    payload.payment_method = form.paymentMethod;
+    payload.authorize_payment = form.authorizePayment;
+  } else if (form.action === "PAY_WON_ITEM") {
+    if (!form.tradeRef) {
+      $("confirmError").textContent = "Cần nhập trade_ref (mã giao dịch đã thắng) cho PAY_WON_ITEM";
+      $("confirmError").hidden = false;
+      return;
+    }
+    payload.trade_ref = form.tradeRef;
+    payload.payment_method = form.paymentMethod;
+    if (address) payload.address = address;
   }
 
   // Lưu ý định TRƯỚC khi gửi (mục 5.3): nếu service worker/popup bị đóng
@@ -242,7 +304,7 @@ async function handleConfirm() {
   const entry = {
     intentId,
     idempotencyKey,
-    action,
+    action: form.action,
     auctionId: currentPreview.auction_id,
     accountId: state.accountId,
     createdAt: Date.now(),
@@ -296,7 +358,14 @@ function wireEvents() {
     $("previewBox").hidden = true;
     currentPreview = null;
   });
-  ["maxBidInput", "maxItemPriceInput", "maxTotalInput", "dryRunCheckbox"].forEach((id) => {
+  [
+    "maxBidInput",
+    "maxItemPriceInput",
+    "maxTotalInput",
+    "tradeRefInput",
+    "authorizePaymentCheckbox",
+    "dryRunCheckbox",
+  ].forEach((id) => {
     $(id).addEventListener("input", updateConfirmButtonLabel);
     $(id).addEventListener("change", updateConfirmButtonLabel);
   });

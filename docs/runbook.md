@@ -149,7 +149,8 @@ trường live:** tạm dừng nhận lệnh mới, đối soát toàn bộ lệ
 | Crash-recovery (`SUBMITTING` → `RECONCILING`) | Đã kiểm thử tự động (mock/SQLite) |
 | PLACE_BID trên mock adapter | Đã kiểm thử tự động |
 | BUY_NOW trên mock adapter | Đã kiểm thử tự động |
-| STORE_CHECKOUT, PAY_WON_ITEM | Có schema + adapter mock, **chưa có test end-to-end riêng** |
+| STORE_CHECKOUT trên mock adapter (kể cả PAYMENT_AUTH_REQUIRED) | Đã kiểm thử tự động |
+| PAY_WON_ITEM trên mock adapter | Đã kiểm thử tự động |
 | Migration trên PostgreSQL thật | **Chưa** (mới chạy trên SQLite) |
 | Extension trong Chrome thật | **Chưa cài/chưa test tay** |
 | `check_session`/`get_listing` Yahoo thật | **Chưa** — raise `AdapterNotImplementedError` |

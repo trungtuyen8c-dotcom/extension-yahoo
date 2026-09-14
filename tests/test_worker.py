@@ -174,3 +174,75 @@ def test_claim_is_exclusive_no_double_claim(db_session, mock_adapter):
     second = claim_next_command(db_session, "worker-2")
     assert first is not None
     assert second is None
+
+
+_ADDRESS = {
+    "recipient_name": "Nguyen Van A",
+    "postal_code": "123-4567",
+    "prefecture": "Tokyo",
+    "city_line": "1-2-3",
+    "phone": "0312345678",
+}
+
+
+def test_store_checkout_pays_immediately_when_combined_and_authorized(db_session, mock_adapter):
+    account = _make_account(db_session)
+    mock_adapter.seed_listing("S1", listing_type="STORE_FIXED_PRICE", payment_separable=False)
+    command = _make_command(
+        db_session, account, action="STORE_CHECKOUT", auction_id="S1", dry_run=False, amount=2000,
+        payload={
+            "action": "STORE_CHECKOUT", "account_id": account.id, "auction_id": "S1", "preview_id": "prev-1",
+            "max_total_jpy": 2000, "address": _ADDRESS, "delivery_method": "yamato",
+            "payment_method": "bank_transfer", "authorize_payment": True, "dry_run": False,
+        },
+    )
+
+    claimed = claim_next_command(db_session, "worker-1")
+    process_claimed_command(db_session, claimed, mock_adapter)
+
+    db_session.refresh(command)
+    assert command.command_status == "SUCCEEDED"
+    assert command.payment_status == "PAID"
+    # Đã trả tiền — nghĩa vụ đã hết, giải phóng dự trữ (mục 8).
+    assert active_reservation_total(db_session, account.id) == 0
+
+
+def test_store_checkout_fails_without_authorization_when_combined(db_session, mock_adapter):
+    account = _make_account(db_session)
+    mock_adapter.seed_listing("S2", listing_type="STORE_FIXED_PRICE", payment_separable=False)
+    command = _make_command(
+        db_session, account, action="STORE_CHECKOUT", auction_id="S2", dry_run=False, amount=2000,
+        payload={
+            "action": "STORE_CHECKOUT", "account_id": account.id, "auction_id": "S2", "preview_id": "prev-1",
+            "max_total_jpy": 2000, "address": _ADDRESS, "delivery_method": "yamato",
+            "payment_method": "bank_transfer", "authorize_payment": False, "dry_run": False,
+        },
+    )
+
+    claimed = claim_next_command(db_session, "worker-1")
+    process_claimed_command(db_session, claimed, mock_adapter)
+
+    db_session.refresh(command)
+    assert command.command_status == "FAILED"
+    assert active_reservation_total(db_session, account.id) == 0
+
+
+def test_pay_won_item_success_marks_paid(db_session, mock_adapter):
+    account = _make_account(db_session)
+    mock_adapter.seed_listing("A1")
+    command = _make_command(
+        db_session, account, action="PAY_WON_ITEM", auction_id="A1", dry_run=False, amount=1500,
+        payload={
+            "action": "PAY_WON_ITEM", "account_id": account.id, "auction_id": "A1", "preview_id": "prev-1",
+            "trade_ref": "MOCK-TRADE-1", "max_total_jpy": 1500, "payment_method": "bank_transfer",
+            "dry_run": False,
+        },
+    )
+
+    claimed = claim_next_command(db_session, "worker-1")
+    process_claimed_command(db_session, claimed, mock_adapter)
+
+    db_session.refresh(command)
+    assert command.command_status == "SUCCEEDED"
+    assert command.payment_status == "PAID"
+    assert active_reservation_total(db_session, account.id) == 0

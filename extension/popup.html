@@ -28,6 +28,8 @@
       <select id="actionSelect">
         <option value="PLACE_BID">Đặt giá (PLACE_BID)</option>
         <option value="BUY_NOW">Mua ngay (BUY_NOW)</option>
+        <option value="STORE_CHECKOUT">Checkout cửa hàng (STORE_CHECKOUT)</option>
+        <option value="PAY_WON_ITEM">Thanh toán đã thắng (PAY_WON_ITEM)</option>
       </select>
     </div>
     <button id="previewButton">Xem trước qua VPS</button>
@@ -56,14 +58,59 @@
           <input id="maxItemPriceInput" type="number" min="1" step="1" />
         </div>
       </div>
+      <div id="tradeRefFields" class="amount-fields" hidden>
+        <div class="row">
+          <label for="tradeRefInput">Mã giao dịch đã thắng (trade_ref)</label>
+          <input id="tradeRefInput" type="text" placeholder="Lấy từ kết quả lệnh BUY_NOW/PLACE_BID trước đó" />
+        </div>
+      </div>
       <div class="row">
         <label for="maxTotalInput">Tổng tối đa gồm phí (JPY)</label>
         <input id="maxTotalInput" type="number" min="1" step="1" />
       </div>
 
+      <div id="paymentMethodFields" class="amount-fields" hidden>
+        <div id="deliveryMethodRow" class="row">
+          <label for="deliveryMethodInput">Phương thức giao hàng</label>
+          <input id="deliveryMethodInput" type="text" placeholder="vd: yamato_takkyubin" />
+        </div>
+        <div class="row">
+          <label for="paymentMethodInput">Phương thức thanh toán</label>
+          <input id="paymentMethodInput" type="text" placeholder="vd: bank_transfer (chỉ phương thức đã kiểm thử mới thật sự chạy được)" />
+        </div>
+      </div>
+
+      <div id="addressFields" class="amount-fields" hidden>
+        <div class="row">
+          <label for="addrRecipientName">Người nhận</label>
+          <input id="addrRecipientName" type="text" />
+        </div>
+        <div class="row">
+          <label for="addrPostalCode">Mã bưu điện</label>
+          <input id="addrPostalCode" type="text" placeholder="123-4567" />
+        </div>
+        <div class="row">
+          <label for="addrPrefecture">Tỉnh/thành</label>
+          <input id="addrPrefecture" type="text" />
+        </div>
+        <div class="row">
+          <label for="addrCityLine">Địa chỉ chi tiết</label>
+          <input id="addrCityLine" type="text" />
+        </div>
+        <div class="row">
+          <label for="addrPhone">Số điện thoại</label>
+          <input id="addrPhone" type="text" />
+        </div>
+      </div>
+
+      <label id="authorizePaymentRow" class="checkbox-row" hidden>
+        <input id="authorizePaymentCheckbox" type="checkbox" />
+        Cấp quyền thanh toán ngay nếu listing gộp mua + trả tiền (không tách được luồng riêng)
+      </label>
+
       <label class="checkbox-row">
         <input id="dryRunCheckbox" type="checkbox" checked />
-        Chỉ kiểm tra (dry-run) — không đặt giá/mua thật
+        Chỉ kiểm tra (dry-run) — không đặt giá/mua/thanh toán thật
       </label>
 
       <button id="confirmButton" class="confirm-button"></button>

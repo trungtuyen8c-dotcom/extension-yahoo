@@ -31,6 +31,51 @@ def _bid_payload(*, account_id, auction_id, preview_id, intent_id=None, dry_run=
     }
 
 
+_ADDRESS = {
+    "recipient_name": "Nguyen Van A",
+    "postal_code": "123-4567",
+    "prefecture": "Tokyo",
+    "city_line": "1-2-3",
+    "phone": "0312345678",
+}
+
+
+def _store_checkout_payload(*, account_id, auction_id, preview_id, intent_id=None, authorize_payment=True, max_total=2000):
+    return {
+        "intent_id": intent_id or str(uuid.uuid4()),
+        "account_id": account_id,
+        "auction_id": auction_id,
+        "preview_id": preview_id,
+        "action": "STORE_CHECKOUT",
+        "currency": "JPY",
+        "unknown_cost_policy": "BLOCK",
+        "max_total_jpy": max_total,
+        "address": _ADDRESS,
+        "delivery_method": "yamato",
+        "payment_method": "bank_transfer",
+        "authorize_payment": authorize_payment,
+        "expires_in_seconds": 120,
+        "dry_run": True,
+    }
+
+
+def _pay_won_item_payload(*, account_id, auction_id, preview_id, trade_ref, intent_id=None, max_total=1500):
+    return {
+        "intent_id": intent_id or str(uuid.uuid4()),
+        "account_id": account_id,
+        "auction_id": auction_id,
+        "preview_id": preview_id,
+        "action": "PAY_WON_ITEM",
+        "currency": "JPY",
+        "unknown_cost_policy": "BLOCK",
+        "trade_ref": trade_ref,
+        "max_total_jpy": max_total,
+        "payment_method": "bank_transfer",
+        "expires_in_seconds": 120,
+        "dry_run": True,
+    }
+
+
 def test_pairing_exchange_and_authenticated_call(app_client):
     account_id = create_account(app_client.SessionLocal, owner_id="owner-pair")
     resp = app_client.post(
@@ -203,3 +248,40 @@ def test_forbidden_scope(app_client):
 
     resp = app_client.post("/api/commands", json=payload, headers={**auth_headers(token), "Idempotency-Key": "k-scope"})
     assert resp.status_code == 403
+
+
+def test_store_checkout_requires_payment_authorization(app_client):
+    account_id = create_account(app_client.SessionLocal)
+    token = create_device_token(app_client.SessionLocal)
+    app_client.mock_adapter.seed_listing(
+        "S1", listing_type="STORE_FIXED_PRICE", payment_separable=False
+    )
+    preview = _make_preview(app_client, token, account_id, "S1", action="STORE_CHECKOUT")
+
+    payload = _store_checkout_payload(
+        account_id=account_id, auction_id="S1", preview_id=preview["preview_id"], authorize_payment=False
+    )
+    resp = app_client.post("/api/commands", json=payload, headers={**auth_headers(token), "Idempotency-Key": "k-checkout-auth"})
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "PAYMENT_AUTH_REQUIRED"
+
+    # Cấp quyền -> chấp nhận lệnh.
+    payload_ok = _store_checkout_payload(
+        account_id=account_id, auction_id="S1", preview_id=preview["preview_id"], authorize_payment=True
+    )
+    resp_ok = app_client.post("/api/commands", json=payload_ok, headers={**auth_headers(token), "Idempotency-Key": "k-checkout-ok"})
+    assert resp_ok.status_code == 202, resp_ok.text
+
+
+def test_pay_won_item_command_creation(app_client):
+    account_id = create_account(app_client.SessionLocal)
+    token = create_device_token(app_client.SessionLocal)
+    app_client.mock_adapter.seed_listing("A1")
+    preview = _make_preview(app_client, token, account_id, "A1", action="PAY_WON_ITEM")
+
+    payload = _pay_won_item_payload(
+        account_id=account_id, auction_id="A1", preview_id=preview["preview_id"], trade_ref="MOCK-TRADE-1"
+    )
+    resp = app_client.post("/api/commands", json=payload, headers={**auth_headers(token), "Idempotency-Key": "k-pay-won"})
+    assert resp.status_code == 202, resp.text
+    assert resp.json()["action"] == "PAY_WON_ITEM"
