@@ -1,9 +1,13 @@
 /**
  * Service worker (mục 5.1-5.3): nơi DUY NHẤT gọi API qua tunnel và giữ
  * token. Không nhận lệnh giao dịch từ content script/website — chỉ xử lý
- * message đã định nghĩa, và chỉ tin sender là chính extension này
- * (sender.id === chrome.runtime.id) và không phải content script
- * (!sender.tab). Không mở externally_connectable cho Yahoo hay bất kỳ ai.
+ * message đã định nghĩa, và chỉ tin sender có `sender.url` thuộc chính
+ * origin extension này (`chrome-extension://<id>/...`), tức message đến từ
+ * popup/trang extension, không phải content script chạy trong trang web
+ * bất kỳ (sender.url khi đó là URL của trang web, dù sender.tab có thể vẫn
+ * tồn tại kể cả khi popup được mở dưới dạng một tab thường — nên không
+ * dùng `!sender.tab` để phân biệt). Không mở externally_connectable cho
+ * Yahoo hay bất kỳ ai.
  */
 
 const API_BASE_URL = "http://127.0.0.1:18000";
@@ -20,10 +24,10 @@ const TRUSTED_MESSAGE_TYPES = new Set([
   "GET_ACCOUNT_STATUS",
 ]);
 
+const EXTENSION_ORIGIN = chrome.runtime.getURL("");
+
 function isTrustedSender(sender) {
-  // sender.tab tồn tại nghĩa là message tới từ content script/trang web,
-  // không phải từ popup/trang extension đã xác nhận (mục 5.1).
-  return sender.id === chrome.runtime.id && !sender.tab;
+  return sender.id === chrome.runtime.id && Boolean(sender.url) && sender.url.startsWith(EXTENSION_ORIGIN);
 }
 
 async function getSession() {

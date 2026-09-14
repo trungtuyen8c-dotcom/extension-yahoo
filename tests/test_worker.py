@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from backend.db.models import Account, Command
+from backend.db.models import Account, Command, Preview
 from backend.domain.budget import active_reservation_total, reserve_budget
 from backend.worker.locks import claim_next_command
 from backend.worker.runner import process_claimed_command, recover_on_startup
@@ -18,16 +18,32 @@ def _make_account(db_session, budget=100_000) -> Account:
     return account
 
 
+def _make_preview(db_session, account, *, auction_id="A1", action="PLACE_BID") -> Preview:
+    preview = Preview(
+        owner_id=account.owner_id,
+        account_id=account.id,
+        auction_id=auction_id,
+        action=action,
+        listing_snapshot={"fees_fully_known": True},
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=300),
+    )
+    db_session.add(preview)
+    db_session.flush()
+    return preview
+
+
 def _make_command(db_session, account, *, action="PLACE_BID", auction_id="A1", dry_run=False, payload=None, expires_seconds=120, amount=1500):
-    payload = payload or {
+    preview = _make_preview(db_session, account, auction_id=auction_id, action=action)
+    payload = dict(payload) if payload else {
         "action": action,
         "account_id": account.id,
         "auction_id": auction_id,
-        "preview_id": "prev-1",
         "max_bid_jpy": 1000,
         "max_total_jpy": amount,
         "dry_run": dry_run,
     }
+    payload["preview_id"] = preview.id  # FK thật — ghi đè placeholder nếu có.
+
     command = Command(
         owner_id=account.owner_id,
         account_id=account.id,
@@ -37,7 +53,7 @@ def _make_command(db_session, account, *, action="PLACE_BID", auction_id="A1", d
         payload_hash="hash",
         payload=payload,
         action=action,
-        preview_id="prev-1",
+        preview_id=preview.id,
         dry_run=dry_run,
         expires_at=datetime.now(timezone.utc) + timedelta(seconds=expires_seconds),
     )

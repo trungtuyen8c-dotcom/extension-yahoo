@@ -7,7 +7,7 @@ os.environ.setdefault("LIVE_ACTIONS_ENABLED", "false")
 os.environ.setdefault("YAHOO_ADAPTER", "mock")
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -23,6 +23,15 @@ def engine():
         poolclass=StaticPool,
         future=True,
     )
+
+    # SQLite bỏ qua foreign key theo mặc định — bật lên để test phát hiện
+    # cùng lớp lỗi mà PostgreSQL thật sẽ chặn (vd preview_id không tồn tại).
+    @event.listens_for(eng, "connect")
+    def _enable_fk(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(eng)
     yield eng
     eng.dispose()
