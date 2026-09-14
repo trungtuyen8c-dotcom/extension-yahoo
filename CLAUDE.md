@@ -20,40 +20,44 @@ thực thi giao dịch bằng tài khoản đã đăng nhập (Playwright + Chro
 
 ## Trạng thái hiện tại
 
-`extension/`, `backend/worker/`, `migrations/versions/`, `tests/`, `deploy/`,
-`docs/` tồn tại nhưng phần lớn còn trống — đây là bộ khung mục 13, chưa phải
-sản phẩm chạy được. Cụ thể những gì **đã có**:
+Nền tảng đã chạy được thật (không chỉ là khung code) — chi tiết đầy đủ và
+cập nhật nhất nằm ở [docs/runbook.md](docs/runbook.md) mục 0, đọc file đó
+trước khi giả định trạng thái. Tóm tắt:
 
-- `backend/config.py`, `backend/db/` (models + session), `backend/domain/`
-  (schemas, status machine, idempotency, budget, auth, errors),
-  `backend/adapters/` (interface `base.py`, `factory.py`, `mock/`, khung
-  `yahoo/` chưa triển khai), `backend/api/` (deps + routes: commands,
-  pairing, previews).
+- `extension/`, `backend/api/`, `backend/domain/`, `backend/worker/`,
+  `backend/adapters/mock/`, `migrations/`, `tests/` (47 test), `deploy/`
+  đều có mã nguồn hoạt động, đã chạy thật trên PostgreSQL (cả local lẫn
+  VPS `yahoojp-vps`) và extension đã nạp thật vào Chromium (Playwright)
+  lẫn deploy production trên VPS chung với dự án `orderhangnhat`
+  (`103.166.184.140`), service `yahoo-vps-api`/`yahoo-vps-worker`
+  (systemd, user `yahoo-vps` không phải root), Postgres riêng trong
+  container Docker `yahoo-vps-postgres` (loopback `127.0.0.1:15432`).
+- SSH alias cục bộ: `yahoojp-vps` (user `yahoo-vps`, key
+  `~/.ssh/id_ed25519_yahoojp_vps`). Không dùng root cho việc thường ngày;
+  root (`orderhangnhat-production`) chỉ dùng cho việc quản trị hệ thống
+  một lần (tạo user, cài systemd unit, tạo container Postgres).
 
 Những gì **chưa có** — đừng giả định chúng tồn tại:
 
-- Không có entrypoint FastAPI (`backend/main.py` hoặc tương đương) — chưa có
-  `FastAPI()` app nào include các router trong `backend/api/routes/`.
-- Không có `backend/worker/` thật — thư mục rỗng, chưa có vòng lặp nhận lệnh
-  (mục 9.3).
-- `migrations/versions/` rỗng — chưa có Alembic env/revision nào, dù
-  `alembic` đã khai trong `pyproject.toml`.
-- `tests/` rỗng — chưa có test nào, dù `pyproject.toml` đã cấu hình pytest.
-- `extension/` chỉ có thư mục `icons/` rỗng — chưa có manifest/content
-  script/popup.
-- Chưa đăng nhập Yahoo, chưa truy cập VPS, chưa đặt giá/mua/thanh toán thật.
 - `backend/adapters/yahoo/adapter.py` cố tình `raise AdapterNotImplementedError`
-  ở mọi hàm `submit_*` — không tự điền selector đoán mò (xem docstring đầu file).
+  ở mọi hàm `submit_*`/`get_listing`/`check_session` — chưa khảo sát
+  URL/DOM thật của `auctions.yahoo.co.jp`, không tự điền selector đoán mò
+  (xem docstring đầu file).
+- Chưa đăng nhập Yahoo thật, chưa đặt giá/mua/thanh toán thật.
+  `LIVE_ACTIONS_ENABLED=false` và `YAHOO_ADAPTER=mock` trên VPS — mọi lệnh
+  hiện tại chỉ chạy qua adapter mô phỏng.
+- Chưa cài Playwright/Chromium trên VPS (cố tình bỏ qua để tiết kiệm đĩa —
+  VPS chỉ còn ~3.3GB trống — cho tới khi thật sự cần adapter Yahoo thật).
 
 ## Lệnh thường dùng
 
 ```bash
 pip install -e ".[dev]"   # cài backend + pytest/httpx
-pytest                     # chạy test suite (tests/ hiện chưa có file test)
+pytest -q                  # 47 test, dùng SQLite in-memory (bật FK enforcement)
 ```
 
 Chưa có lint/format tool nào được cấu hình trong repo (không có ruff/black/
-mypy config) — đừng bịa lệnh lint.
+mypy config) — dùng `pyflakes backend/ tests/` để kiểm tra nhanh nếu cần.
 
 ## Kiến trúc backend
 

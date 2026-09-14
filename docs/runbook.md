@@ -31,16 +31,43 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
   trang lạ) cũng có `sender.tab`, khiến message bị từ chối nhầm. Đã đổi
   sang kiểm tra `sender.url` thuộc đúng origin `chrome-extension://<id>/`.
 
+**Đã triển khai lên VPS thật** (không phải hướng dẫn lý thuyết nữa):
+
+- VPS: `103.166.184.140` — **dùng chung với production của dự án
+  `orderhangnhat`** (đã có postgres/redis/minio/nginx/grafana riêng chạy
+  trên đó). Đã xác nhận với chủ dự án trước khi cài. Ubuntu 24.04, 2 vCPU,
+  3.8GB RAM (không swap), ~3.3GB đĩa trống sau khi cài — khá chật, cân
+  nhắc kỹ trước khi cài thêm gì nặng (đặc biệt Chromium).
+- User vận hành: `yahoo-vps` (không phải root), SSH alias cục bộ
+  `yahoojp-vps` (key `~/.ssh/id_ed25519_yahoojp_vps`). `yahoo-vps` chỉ có
+  sudo giới hạn (`/etc/sudoers.d/yahoo-vps`) để `start/stop/restart/status`
+  đúng 2 service `yahoo-vps-api`/`yahoo-vps-worker` — không có quyền root
+  khác. Dùng `sudo -n` (non-interactive) khi gọi qua SSH không có tty.
+- Postgres: container Docker riêng `yahoo-vps-postgres`, KHÔNG dùng chung
+  với postgres của orderhangnhat, volume riêng `yahoo_vps_pg_data`, chỉ
+  bind `127.0.0.1:15432` (không public).
+- Code deploy bằng `rsync` trực tiếp từ máy local vào
+  `/home/yahoo-vps/app` (không qua GitHub trên VPS) — xem mục 11 để biết
+  cách cập nhật code sau này.
+- `.env` thật nằm ở `/home/yahoo-vps/app/.env` trên VPS (secrets random,
+  không có trong git). `LIVE_ACTIONS_ENABLED=false`, `YAHOO_ADAPTER=mock`.
+- Đã xác nhận qua tunnel SSH thật (`ssh -L 127.0.0.1:18000:127.0.0.1:8000
+  yahoojp-vps`): pairing exchange, preview 404 đúng cho listing không tồn
+  tại, tạo lệnh 422 đúng khi preview sai, token sai trả 401.
+- **Chưa cài Playwright/Chromium trên VPS** — cố tình bỏ qua vì đĩa chật
+  và adapter Yahoo thật chưa viết; cài khi nào thật sự cần.
+
 **Chưa làm, không được coi là đã xong:**
 
 - Chưa khảo sát URL/DOM thật của `auctions.yahoo.co.jp` — `backend/adapters/yahoo/adapter.py`
   cố tình raise `AdapterNotImplementedError` ở mọi hàm thao tác. ID trong
   `extension/content.js` vẫn là pattern **chưa xác minh** với trang thật.
-- Chưa cài lên VPS thật, chưa mở tunnel SSH thật, chưa đăng nhập Yahoo thật.
+- Chưa đăng nhập Yahoo thật trên VPS (chưa cần vì chưa cài Chromium).
 - Chưa đặt giá, mua hay thanh toán thật. `LIVE_ACTIONS_ENABLED=false` theo
   mặc định và phải giữ vậy cho tới khi qua Cổng B với listing/account thật.
 - Extension chưa được người dùng thật cài qua "Load unpacked" và bấm tay
-  trong Chrome bình thường (chỉ mới chạy tự động qua Playwright).
+  trong Chrome bình thường, chưa trỏ vào VPS thật qua tunnel (chỉ mới
+  chạy tự động qua Playwright nhắm vào server local).
 
 Xem mục 15–16 của đặc tả gốc để biết bảng kiểm thử và cổng nghiệm thu đầy
 đủ. Phần "Đã kiểm thử / chưa kiểm thử" ở cuối file này liệt kê chi tiết.
@@ -192,11 +219,53 @@ trường live:** tạm dừng nhận lệnh mới, đối soát toàn bộ lệ
 2. ~~Load thử extension trong Chrome thật~~ — đã chạy tự động qua
    Playwright (mục 0), nhưng nên tự tay "Load unpacked" + bấm thử một lần
    trên Chrome thường của bạn trước khi tin tưởng hoàn toàn UX.
-3. ~~Cài Postgres, chạy migration~~ — đã xác nhận migration chạy đúng trên
-   PostgreSQL 16 thật (container tạm khi phát triển); còn thiếu: chạy lại
-   đúng trên VPS thật, cấu hình backup/volume bền vững.
-4. Viết `submit_bid` thật, dừng ở dry-run (Cổng B) trước khi bật live cho
-   PLACE_BID.
-5. Dashboard quản trị đầy đủ (đăng nhập thật, xem hàng đợi/tuổi lệnh/nhịp
+3. ~~Cài Postgres, chạy migration~~ — đã chạy thật trên VPS
+   `yahoojp-vps` (mục 0, 11); còn thiếu: cấu hình backup định kỳ cho
+   volume `yahoo_vps_pg_data`, diễn tập phục hồi.
+4. Mở tunnel thật (`ssh -L 127.0.0.1:18000:127.0.0.1:8000 yahoojp-vps`) và
+   thử extension với VPS thật (chỉ mới test tự động nhắm server local).
+5. Viết `submit_bid` thật, dừng ở dry-run (Cổng B) trước khi bật live cho
+   PLACE_BID — lúc đó mới cần cài Playwright/Chromium trên VPS.
+6. Dashboard quản trị đầy đủ (đăng nhập thật, xem hàng đợi/tuổi lệnh/nhịp
    worker/ngân sách đang giữ, nút tạm dừng) — hiện chỉ có endpoint tạo mã
    ghép cặp tối thiểu.
+
+## 11. Vận hành VPS đã triển khai (`yahoojp-vps`)
+
+```bash
+# SSH (không dùng root cho việc thường ngày)
+ssh yahoojp-vps
+
+# Xem log 2 service
+ssh yahoojp-vps "sudo -n journalctl -u yahoo-vps-api -n 50 --no-pager"
+ssh yahoojp-vps "sudo -n journalctl -u yahoo-vps-worker -n 50 --no-pager"
+
+# Restart sau khi đổi .env hoặc code
+ssh yahoojp-vps "sudo -n systemctl restart yahoo-vps-api"
+ssh yahoojp-vps "sudo -n systemctl restart yahoo-vps-worker"
+
+# Cập nhật code (từ máy local, trong thư mục dự án)
+rsync -az --delete \
+  --exclude='.venv' --exclude='.git' --exclude='__pycache__' \
+  --exclude='.env' --exclude='*.db' --exclude='.pytest_cache' \
+  ./ yahoojp-vps:/home/yahoo-vps/app/
+ssh yahoojp-vps "cd /home/yahoo-vps/app && .venv/bin/pip install -q -e . && set -a && source .env && set +a && .venv/bin/alembic upgrade head"
+ssh yahoojp-vps "sudo -n systemctl restart yahoo-vps-api && sudo -n systemctl restart yahoo-vps-worker"
+
+# Kiểm tra sức khỏe
+ssh yahoojp-vps "curl -s http://127.0.0.1:8000/api/health"
+```
+
+`sudo -n` (non-interactive) bắt buộc khi gọi qua `ssh host "command"` không
+có tty — `sudo` thường (không `-n`) sẽ báo "a password is required" dù
+NOPASSWD đã đúng, vì không cấp phát được pty cho việc hỏi mật khẩu.
+
+Postgres container: `docker exec -it yahoo-vps-postgres psql -U yahoo_app
+yahoo_vps` (chạy lệnh này bằng root/`orderhangnhat-production`, vì
+`yahoo-vps` không nằm trong docker group — cố tình, để không có quyền
+tương đương root qua docker socket).
+
+Mật khẩu Postgres và các secret khác chỉ nằm trong
+`/home/yahoo-vps/app/.env` trên VPS — không có bản sao ở đâu khác, không
+commit vào git. Nếu mất, tạo secret mới và cập nhật `.env` (không có cách
+khôi phục secret cũ).
