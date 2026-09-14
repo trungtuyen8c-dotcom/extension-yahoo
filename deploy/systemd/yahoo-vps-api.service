@@ -1,0 +1,24 @@
+[Unit]
+Description=Yahoo VPS Command API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# KHÔNG chạy bằng root (mục 6).
+User=yahoo-vps
+Group=yahoo-vps
+WorkingDirectory=/opt/yahoo-vps
+EnvironmentFile=/opt/yahoo-vps/.env
+ExecStart=/opt/yahoo-vps/.venv/bin/uvicorn backend.api.main:app \
+  --host 127.0.0.1 --port 8000 --no-server-header
+Restart=on-failure
+RestartSec=2
+# API không tự thực thi browser trong request (mục 6) — không cần quyền
+# thêm ngoài đọc/ghi thư mục làm việc và DB qua network loopback.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/yahoo-vps
+
+[Install]
+WantedBy=multi-user.target

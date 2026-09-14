@@ -1,0 +1,48 @@
+# Tùy chọn triển khai bằng Compose thay cho systemd (mục 6). Database
+# KHÔNG publish ra ngoài; API publish cố định vào loopback của VPS.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: yahoo_vps
+      POSTGRES_USER: yahoo_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - yahoo_vps_db_data:/var/lib/postgresql/data
+    # Không publish port ra host/Internet — chỉ mạng nội bộ compose.
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    command: uvicorn backend.api.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://yahoo_app:${POSTGRES_PASSWORD}@db:5432/yahoo_vps
+    ports:
+      # Chỉ bind loopback của VPS, không phải 0.0.0.0 (mục 6).
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      - db
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    command: python -m backend.worker.main
+    env_file:
+      - ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://yahoo_app:${POSTGRES_PASSWORD}@db:5432/yahoo_vps
+    depends_on:
+      - db
+    # Chromium cần shared memory đủ lớn; ghim theo tài nguyên VPS thật sau
+    # khi đo (mục 6).
+    shm_size: "1gb"
+
+volumes:
+  yahoo_vps_db_data:

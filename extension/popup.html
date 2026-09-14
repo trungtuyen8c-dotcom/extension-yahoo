@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>Yahoo Auctions qua VPS</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <header>
+    <h1>Yahoo Auctions qua VPS</h1>
+    <div id="connectionBadge" class="badge">Đang kiểm tra...</div>
+  </header>
+
+  <section id="pairingPanel" hidden>
+    <p class="hint">Chưa ghép cặp thiết bị. Lấy mã ghép cặp từ dashboard trên VPS.</p>
+    <input id="pairingCodeInput" type="text" placeholder="Mã ghép cặp" autocomplete="off" />
+    <button id="pairButton">Ghép cặp</button>
+    <p id="pairingError" class="error" hidden></p>
+  </section>
+
+  <section id="mainPanel" hidden>
+    <div class="row">
+      <label for="auctionIdInput">ID listing</label>
+      <input id="auctionIdInput" type="text" placeholder="Nhập hoặc dùng ID gợi ý từ tab" />
+    </div>
+    <div class="row">
+      <label for="actionSelect">Hành động</label>
+      <select id="actionSelect">
+        <option value="PLACE_BID">Đặt giá (PLACE_BID)</option>
+        <option value="BUY_NOW">Mua ngay (BUY_NOW)</option>
+      </select>
+    </div>
+    <button id="previewButton">Xem trước qua VPS</button>
+    <p id="previewError" class="error" hidden></p>
+
+    <div id="previewBox" class="preview-box" hidden>
+      <h2 id="previewTitle"></h2>
+      <dl>
+        <dt>Người bán</dt><dd id="previewSeller"></dd>
+        <dt>Loại listing</dt><dd id="previewListingType"></dd>
+        <dt>Giá hiện tại</dt><dd id="previewPrice"></dd>
+        <dt>Phí đã biết</dt><dd id="previewFees"></dd>
+        <dt>Cập nhật lúc</dt><dd id="previewFetchedAt"></dd>
+        <dt>Preview hết hạn</dt><dd id="previewExpiresAt"></dd>
+      </dl>
+
+      <div id="bidFields" class="amount-fields">
+        <div class="row">
+          <label for="maxBidInput">Mức đấu tối đa (JPY)</label>
+          <input id="maxBidInput" type="number" min="1" step="1" />
+        </div>
+      </div>
+      <div id="buyNowFields" class="amount-fields" hidden>
+        <div class="row">
+          <label for="maxItemPriceInput">Giá mua ngay tối đa (JPY)</label>
+          <input id="maxItemPriceInput" type="number" min="1" step="1" />
+        </div>
+      </div>
+      <div class="row">
+        <label for="maxTotalInput">Tổng tối đa gồm phí (JPY)</label>
+        <input id="maxTotalInput" type="number" min="1" step="1" />
+      </div>
+
+      <label class="checkbox-row">
+        <input id="dryRunCheckbox" type="checkbox" checked />
+        Chỉ kiểm tra (dry-run) — không đặt giá/mua thật
+      </label>
+
+      <button id="confirmButton" class="confirm-button"></button>
+      <p id="confirmError" class="error" hidden></p>
+    </div>
+  </section>
+
+  <section id="trackedPanel">
+    <h2>Lệnh đang theo dõi</h2>
+    <ul id="trackedList"></ul>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

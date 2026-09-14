@@ -1,0 +1,143 @@
+body {
+  width: 360px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  margin: 0;
+  padding: 12px;
+  color: #1a1a1a;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0;
+}
+
+h2 {
+  font-size: 13px;
+  margin: 8px 0 4px;
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #eee;
+  color: #555;
+}
+
+.badge.ok {
+  background: #d7f5dd;
+  color: #146c2e;
+}
+
+.badge.error {
+  background: #fbdada;
+  color: #a11212;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+label {
+  font-size: 11px;
+  color: #555;
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  padding: 6px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+button {
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  border: none;
+  border-radius: 4px;
+  background: #2b5fd9;
+  color: white;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+button:disabled {
+  background: #a9b7d9;
+  cursor: default;
+}
+
+.confirm-button {
+  background: #c0392b;
+  font-weight: 600;
+}
+
+.error {
+  color: #a11212;
+  font-size: 12px;
+}
+
+.preview-box {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px;
+  margin: 8px 0;
+}
+
+.preview-box dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  font-size: 12px;
+  margin: 4px 0 8px;
+}
+
+.preview-box dt {
+  color: #666;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.checkbox-row input {
+  width: auto;
+}
+
+#trackedList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+#trackedList li {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.hint {
+  color: #555;
+  font-size: 12px;
+}

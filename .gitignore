@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+.env
+.playwright-profile/
+*.egg-info/
+.pytest_cache/
+node_modules/

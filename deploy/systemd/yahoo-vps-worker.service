@@ -1,0 +1,21 @@
+[Unit]
+Description=Yahoo VPS Command Worker (Playwright + Chromium)
+After=network.target postgresql.service yahoo-vps-api.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+# KHÔNG chạy bằng root; giữ sandbox Chromium (mục 6, 10).
+User=yahoo-vps
+Group=yahoo-vps
+WorkingDirectory=/opt/yahoo-vps
+EnvironmentFile=/opt/yahoo-vps/.env
+ExecStart=/opt/yahoo-vps/.venv/bin/python -m backend.worker.main
+Restart=on-failure
+RestartSec=2
+# Một tiến trình chủ động (mục 6, 9.3) — không chạy nhiều instance song
+# song; recover_on_startup() tự đối soát trước khi nhận lệnh mua mới.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
