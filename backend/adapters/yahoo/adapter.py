@@ -12,6 +12,11 @@ thử selector dự phòng bằng cách bấm hàng loạt nút có khả năng 
 """
 from __future__ import annotations
 
+import json
+import re
+import urllib.error
+import urllib.request
+from datetime import datetime
 from typing import Optional
 
 from backend.adapters.base import (
@@ -29,6 +34,21 @@ _NOT_SURVEYED = (
     "Luồng Yahoo thật chưa được khảo sát/kiểm thử. Xem mục 14 bước 1 và mục "
     "17 (URL listing mẫu, loại listing ưu tiên) trước khi triển khai hàm này."
 )
+
+# Khảo sát thật ngày 2026-09-14 trên https://auctions.yahoo.co.jp/jp/auction/g1237444582
+# (listing đấu giá thường, không có giá mua ngay đã bật). Trang là Next.js
+# SSR, dữ liệu đầy đủ nằm trong <script id="__NEXT_DATA__"> kể cả khi không
+# đăng nhập — dùng JSON này thay vì đoán selector CSS/DOM (ổn định hơn).
+_NEXT_DATA_RE = re.compile(
+    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S
+)
+_ITEM_URL_TEMPLATE = "https://auctions.yahoo.co.jp/jp/auction/{auction_id}"
+_HTTP_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    )
+}
 
 
 class YahooBrowserAdapter(YahooAdapter):
@@ -76,11 +96,92 @@ class YahooBrowserAdapter(YahooAdapter):
         # để xác nhận đúng tài khoản đã cấu hình cho account_id này.
         raise AdapterNotImplementedError(_NOT_SURVEYED)
 
+    def _fetch_item_json(self, auction_id: str) -> Optional[dict]:
+        """GET trang listing công khai (không cần đăng nhập) và trích JSON
+        `__NEXT_DATA__`. Trả None nếu Yahoo trả 404 (listing không tồn tại).
+        """
+        url = _ITEM_URL_TEMPLATE.format(auction_id=auction_id)
+        self._check_allowed_domain(url)
+        request = urllib.request.Request(url, headers=_HTTP_HEADERS)
+        try:
+            with urllib.request.urlopen(request, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            raise
+        match = _NEXT_DATA_RE.search(html)
+        if match is None:
+            return None
+        return json.loads(match.group(1))
+
     def get_listing(self, auction_id: str) -> ListingInfo:
-        # TODO(khảo sát thật): xác minh URL pattern thật của
-        # auctions.yahoo.co.jp cho một listing mẫu (mục 17) trước khi viết
-        # selector đọc tên/người bán/loại listing/giá/phí/hạn (mục 10).
-        raise AdapterNotImplementedError(_NOT_SURVEYED)
+        next_data = self._fetch_item_json(auction_id)
+        if next_data is None:
+            return ListingInfo(auction_id=auction_id, found=False, listing_type="UNKNOWN", supported=False)
+
+        try:
+            item = next_data["props"]["pageProps"]["initialState"]["item"]["detail"]["item"]
+        except (KeyError, TypeError):
+            # Cấu trúc trang đã đổi so với lần khảo sát — không đoán, chặn lại.
+            return ListingInfo(
+                auction_id=auction_id,
+                found=False,
+                listing_type="UNKNOWN",
+                supported=False,
+                raw_evidence={"note": "Cau truc __NEXT_DATA__ khac voi khao sat, chua ho tro"},
+            )
+
+        real_auction_id = item.get("auctionId")
+        if real_auction_id != auction_id:
+            return ListingInfo(auction_id=auction_id, found=False, listing_type="UNKNOWN", supported=False)
+
+        is_flea_market = bool(item.get("isFleaMarket"))
+        listing_type = "FIXED_PRICE" if is_flea_market else "AUCTION"
+        # Chỉ chắc chắn hỗ trợ loại đã khảo sát thật (AUCTION không kèm
+        # フリマ). FIXED_PRICE/STORE_FIXED_PRICE chưa có listing mẫu để xác
+        # nhận cấu trúc JSON tương ứng.
+        supported = not is_flea_market
+
+        featured_price = item.get("featuredPrice") or 0
+
+        seller = item.get("seller") or {}
+        ends_at: Optional[datetime] = None
+        end_time_raw = item.get("endTime")
+        if end_time_raw:
+            ends_at = datetime.fromisoformat(end_time_raw)
+
+        status = item.get("status")
+
+        return ListingInfo(
+            auction_id=auction_id,
+            found=True,
+            listing_type=listing_type,
+            supported=supported,
+            title=item.get("title", ""),
+            seller=seller.get("displayName") or seller.get("aucUserId", ""),
+            seller_is_store=bool(seller.get("isStore")),
+            current_price_jpy=item.get("price"),
+            buy_now_price_jpy=featured_price or None,
+            # Phí/thuế người mua (ship, YPayment,...) chưa được tính gộp
+            # thành 1 con số đáng tin — để unknown_cost_policy=BLOCK chặn
+            # lại thay vì đoán, đúng ràng buộc cứng trong CLAUDE.md.
+            known_fees_jpy=0,
+            fees_fully_known=False,
+            currency="JPY",
+            ends_at=ends_at,
+            is_closed=status is not None and status != "open",
+            payment_separable=True,
+            raw_evidence={
+                "source": "next_data_json",
+                "url": _ITEM_URL_TEMPLATE.format(auction_id=auction_id),
+                "auctionId": real_auction_id,
+                "price": item.get("price"),
+                "bids": item.get("bids"),
+                "status": status,
+                "endTime": end_time_raw,
+            },
+        )
 
     def prepare(self, *, action: str, command) -> PrepareResult:
         self._require_live_enabled()

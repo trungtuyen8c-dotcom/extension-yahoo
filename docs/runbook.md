@@ -77,13 +77,33 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
 - Thêm `POST /api/dev/mock-listings` (yêu cầu `X-Admin-Secret`, tự trả 404
   nếu không phải adapter mock) để seed listing giả qua HTTP khi cần test
   thủ công — không có tác dụng gì khi `YAHOO_ADAPTER=yahoo`.
-- **Chưa cài Playwright/Chromium trên VPS** — cố tình bỏ qua vì đĩa chật
-  và adapter Yahoo thật chưa viết; cài khi nào thật sự cần.
+- **Chưa cài Playwright/Chromium trên VPS** — cố tình bỏ qua vì đĩa chật;
+  không cần cho `get_listing` (xem dưới, chỉ là HTTP GET tĩnh), chỉ cần khi
+  làm `check_session`/`submit_*` (cần phiên đăng nhập thật).
+- **`get_listing` thật đã khảo sát và triển khai** (2026-09-14, listing mẫu
+  `https://auctions.yahoo.co.jp/jp/auction/g1237444582` do người dùng cung
+  cấp — đấu giá thường, không bật giá mua ngay). Trang là Next.js SSR, toàn
+  bộ dữ liệu (giá, người bán, hạn, trạng thái) nằm sẵn trong
+  `<script id="__NEXT_DATA__">` ngay cả khi không đăng nhập — dùng JSON này
+  thay vì đoán CSS selector, ổn định hơn. `backend/adapters/yahoo/adapter.py`
+  `YahooBrowserAdapter.get_listing()`/`_fetch_item_json()` dùng
+  `urllib.request` thuần (không cần Chromium) để GET rồi parse JSON. Đã xác
+  nhận thật: HTTP 404 cho auction ID không tồn tại → `found=False`;
+  `isFleaMarket=True` (loại フリマ/FIXED_PRICE) đánh dấu `supported=False` vì
+  chưa có listing mẫu loại đó để xác nhận cấu trúc JSON; `fees_fully_known`
+  cố định `False` (chưa gộp được phí ship/YPayment thành 1 số đáng tin) nên
+  `unknown_cost_policy=BLOCK` sẽ chặn mọi lệnh dùng preview này — đúng chủ
+  đích, không phải bug. Test: `tests/test_yahoo_adapter.py` (5 test, mock
+  `_fetch_item_json` bằng fixture JSON lấy từ khảo sát thật, không gọi mạng
+  trong test suite).
 
 **Chưa làm, không được coi là đã xong:**
 
-- Chưa khảo sát URL/DOM thật của `auctions.yahoo.co.jp` — `backend/adapters/yahoo/adapter.py`
-  cố tình raise `AdapterNotImplementedError` ở mọi hàm thao tác. ID trong
+- `check_session`/`prepare`/`submit_bid`/`submit_buy_now`/
+  `submit_store_checkout`/`submit_payment`/`reconcile` trong
+  `backend/adapters/yahoo/adapter.py` vẫn cố tình raise
+  `AdapterNotImplementedError` — các hàm này cần phiên đăng nhập Yahoo thật
+  trên VPS (Playwright + Chromium), chưa khảo sát được từ local. ID trong
   `extension/content.js` vẫn là pattern **chưa xác minh** với trang thật.
 - Chưa đăng nhập Yahoo thật trên VPS (chưa cần vì chưa cài Chromium).
 - Chưa đặt giá, mua hay thanh toán thật. `LIVE_ACTIONS_ENABLED=false` theo

@@ -37,12 +37,19 @@ trước khi giả định trạng thái. Tóm tắt:
   root (`orderhangnhat-production`) chỉ dùng cho việc quản trị hệ thống
   một lần (tạo user, cài systemd unit, tạo container Postgres).
 
+Những gì **đã có thật** thêm:
+
+- `backend/adapters/yahoo/adapter.py` `get_listing()` đã khảo sát và cài
+  thật (dựa trên JSON `__NEXT_DATA__` của trang SSR, không cần đăng nhập,
+  không cần Chromium) — xem `docs/runbook.md` mục 0 để biết chi tiết.
+
 Những gì **chưa có** — đừng giả định chúng tồn tại:
 
-- `backend/adapters/yahoo/adapter.py` cố tình `raise AdapterNotImplementedError`
-  ở mọi hàm `submit_*`/`get_listing`/`check_session` — chưa khảo sát
-  URL/DOM thật của `auctions.yahoo.co.jp`, không tự điền selector đoán mò
-  (xem docstring đầu file).
+- `check_session`/`prepare`/`submit_bid`/`submit_buy_now`/
+  `submit_store_checkout`/`submit_payment`/`reconcile` trong
+  `backend/adapters/yahoo/adapter.py` vẫn cố tình `raise
+  AdapterNotImplementedError` — cần phiên đăng nhập Yahoo thật trên VPS,
+  không tự điền selector đoán mò (xem docstring đầu file).
 - Chưa đăng nhập Yahoo thật, chưa đặt giá/mua/thanh toán thật.
   `LIVE_ACTIONS_ENABLED=false` và `YAHOO_ADAPTER=mock` trên VPS — mọi lệnh
   hiện tại chỉ chạy qua adapter mô phỏng.
