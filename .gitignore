@@ -4,6 +4,7 @@ __pycache__/
 *.db
 .env
 .playwright-profile/
+.mock_adapter_state.json
 *.egg-info/
 .pytest_cache/
 node_modules/

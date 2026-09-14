@@ -9,7 +9,7 @@ import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from backend.api.routes import accounts, commands, health, pairing, previews
+from backend.api.routes import accounts, commands, dev, health, pairing, previews
 from backend.domain.errors import DomainError
 
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +22,7 @@ app.include_router(pairing.router)
 app.include_router(previews.router)
 app.include_router(commands.router)
 app.include_router(accounts.router)
+app.include_router(dev.router)
 
 
 @app.exception_handler(DomainError)

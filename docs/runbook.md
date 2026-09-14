@@ -54,6 +54,21 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
 - Đã xác nhận qua tunnel SSH thật (`ssh -L 127.0.0.1:18000:127.0.0.1:8000
   yahoojp-vps`): pairing exchange, preview 404 đúng cho listing không tồn
   tại, tạo lệnh 422 đúng khi preview sai, token sai trả 401.
+- **Extension thật (Playwright, unpacked) đã chạy trọn vẹn nhắm vào VPS
+  thật qua tunnel này** — không phải server local nữa: ghép cặp, xem
+  preview, gửi lệnh dry-run `PLACE_BID`, worker trên VPS xử lý xong tới
+  `DRY_RUN_SUCCEEDED`, budget reservation giải phóng đúng.
+- Việc này lộ ra một giới hạn thật của mock adapter: API và worker là hai
+  **tiến trình** riêng (đúng thiết kế mục 6, 9.3), nên `seed_listing()`
+  gọi từ tiến trình API không tới được adapter mock trong tiến trình
+  worker → lần thử đầu tiên worker báo `LISTING_NOT_FOUND` → `FAILED`
+  (đúng logic an toàn, ngân sách vẫn được giải phóng đúng). Đã sửa bằng
+  cách cho `MockYahooAdapter` đọc/ghi qua file JSON dùng chung khi có biến
+  môi trường `MOCK_ADAPTER_STATE_FILE` — chỉ ảnh hưởng khi
+  `YAHOO_ADAPTER=mock`, không đụng gì tới adapter Yahoo thật sau này.
+- Thêm `POST /api/dev/mock-listings` (yêu cầu `X-Admin-Secret`, tự trả 404
+  nếu không phải adapter mock) để seed listing giả qua HTTP khi cần test
+  thủ công — không có tác dụng gì khi `YAHOO_ADAPTER=yahoo`.
 - **Chưa cài Playwright/Chromium trên VPS** — cố tình bỏ qua vì đĩa chật
   và adapter Yahoo thật chưa viết; cài khi nào thật sự cần.
 
@@ -65,9 +80,9 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
 - Chưa đăng nhập Yahoo thật trên VPS (chưa cần vì chưa cài Chromium).
 - Chưa đặt giá, mua hay thanh toán thật. `LIVE_ACTIONS_ENABLED=false` theo
   mặc định và phải giữ vậy cho tới khi qua Cổng B với listing/account thật.
-- Extension chưa được người dùng thật cài qua "Load unpacked" và bấm tay
-  trong Chrome bình thường, chưa trỏ vào VPS thật qua tunnel (chỉ mới
-  chạy tự động qua Playwright nhắm vào server local).
+- Extension chưa được **bạn** tự tay "Load unpacked" và bấm thử trong
+  Chrome bình thường của mình — mọi lần chạy tới giờ đều qua Playwright
+  tự động (dù đã nhắm vào VPS thật qua tunnel thật, xem phía trên).
 
 Xem mục 15–16 của đặc tả gốc để biết bảng kiểm thử và cổng nghiệm thu đầy
 đủ. Phần "Đã kiểm thử / chưa kiểm thử" ở cuối file này liệt kê chi tiết.
@@ -222,8 +237,8 @@ trường live:** tạm dừng nhận lệnh mới, đối soát toàn bộ lệ
 3. ~~Cài Postgres, chạy migration~~ — đã chạy thật trên VPS
    `yahoojp-vps` (mục 0, 11); còn thiếu: cấu hình backup định kỳ cho
    volume `yahoo_vps_pg_data`, diễn tập phục hồi.
-4. Mở tunnel thật (`ssh -L 127.0.0.1:18000:127.0.0.1:8000 yahoojp-vps`) và
-   thử extension với VPS thật (chỉ mới test tự động nhắm server local).
+4. ~~Mở tunnel thật, thử extension với VPS thật~~ — đã xác nhận qua
+   Playwright (mục 0); còn thiếu: bạn tự "Load unpacked" và bấm tay.
 5. Viết `submit_bid` thật, dừng ở dry-run (Cổng B) trước khi bật live cho
    PLACE_BID — lúc đó mới cần cài Playwright/Chromium trên VPS.
 6. Dashboard quản trị đầy đủ (đăng nhập thật, xem hàng đợi/tuổi lệnh/nhịp

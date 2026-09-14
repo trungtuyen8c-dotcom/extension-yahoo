@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     yahoo_adapter: str = "mock"
     default_unknown_cost_policy: str = "BLOCK"
 
+    # Chỉ dùng khi yahoo_adapter=mock: file JSON dùng chung để API và
+    # worker (hai tiến trình riêng) thấy cùng dữ liệu seed. Để trống =
+    # mỗi tiến trình giữ state riêng trong bộ nhớ (đủ cho unit test).
+    mock_adapter_state_file: str = ""
+
     yahoo_playwright_profile_dir: str = "./.playwright-profile"
     yahoo_adapter_headless: bool = True
     yahoo_allowed_nav_domains: str = "auctions.yahoo.co.jp,login.yahoo.co.jp,payment.yahoo.co.jp"

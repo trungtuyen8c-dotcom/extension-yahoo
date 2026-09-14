@@ -4,6 +4,8 @@ mục 15: "Test retry/crash tài chính trên mock ... không lặp thao tác th
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Optional
 
 from datetime import datetime, timezone
@@ -24,12 +26,49 @@ class MockTimeoutError(Exception):
     """Mô phỏng Yahoo timeout sau khi submit — worker phải giữ UNKNOWN."""
 
 
+def _bid_key(account_id: str, auction_id: str) -> str:
+    return f"{account_id}::{auction_id}"
+
+
 class MockYahooAdapter(YahooAdapter):
-    def __init__(self) -> None:
-        self._listings: dict[str, dict] = {}
-        self._sessions: dict[str, bool] = {}
-        self._bid_state: dict[tuple[str, str], dict] = {}
+    """`state_file` tùy chọn: khi đặt, dữ liệu seed được đọc/ghi qua một
+    file JSON dùng chung thay vì chỉ giữ trong bộ nhớ tiến trình. Cần thiết
+    vì API và worker chạy hai tiến trình riêng (mục 6, 9.3) nên mỗi bên có
+    một instance `MockYahooAdapter` khác nhau — không có file chung thì
+    `seed_listing()` gọi từ API sẽ không thấy được từ worker."""
+
+    def __init__(self, *, state_file: Optional[str] = None) -> None:
+        self._state_file = Path(state_file) if state_file else None
+        self._listings: dict = {}
+        self._sessions: dict = {}
+        self._bid_state: dict = {}
         self._trade_counter = 0
+        self._load()
+
+    # --- Bền vững hoá tối thiểu qua file (chỉ dùng cho dev/test) ---
+
+    def _load(self) -> None:
+        if self._state_file is None or not self._state_file.exists():
+            return
+        try:
+            data = json.loads(self._state_file.read_text())
+        except (json.JSONDecodeError, OSError):
+            return
+        self._listings = data.get("listings", {})
+        self._sessions = data.get("sessions", {})
+        self._bid_state = data.get("bid_state", {})
+        self._trade_counter = data.get("trade_counter", 0)
+
+    def _save(self) -> None:
+        if self._state_file is None:
+            return
+        payload = {
+            "listings": self._listings,
+            "sessions": self._sessions,
+            "bid_state": self._bid_state,
+            "trade_counter": self._trade_counter,
+        }
+        self._state_file.write_text(json.dumps(payload))
 
     # --- Trợ giúp kiểm thử ---
 
@@ -49,6 +88,7 @@ class MockYahooAdapter(YahooAdapter):
         payment_separable: bool = True,
         scenario: str = "SUCCESS",
     ) -> None:
+        self._load()
         self._listings[auction_id] = dict(
             listing_type=listing_type,
             title=title,
@@ -62,13 +102,17 @@ class MockYahooAdapter(YahooAdapter):
             payment_separable=payment_separable,
             scenario=scenario,
         )
+        self._save()
 
     def set_session(self, account_id: str, *, logged_in: bool) -> None:
+        self._load()
         self._sessions[account_id] = logged_in
+        self._save()
 
     # --- YahooAdapter ---
 
     def check_session(self, account_id: str) -> SessionStatus:
+        self._load()
         logged_in = self._sessions.get(account_id, True)
         return SessionStatus(
             account_id=account_id,
@@ -78,6 +122,7 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def get_listing(self, auction_id: str) -> ListingInfo:
+        self._load()
         data = self._listings.get(auction_id)
         if data is None:
             return ListingInfo(
@@ -102,6 +147,7 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def prepare(self, *, action: str, command) -> PrepareResult:
+        self._load()
         listing = self._listings.get(command.auction_id)
         if listing is None:
             return PrepareResult(reached_boundary=False, requires_user=False, reason="LISTING_NOT_FOUND")
@@ -110,16 +156,17 @@ class MockYahooAdapter(YahooAdapter):
         return PrepareResult(reached_boundary=True, requires_user=False, evidence={"checked_at": _now_iso()})
 
     def submit_bid(self, command) -> SubmitResult:
+        self._load()
         listing = self._listings[command.auction_id]
         if listing["scenario"] == "TIMEOUT":
             raise MockTimeoutError("Yahoo không phản hồi sau khi gửi giá")
         if listing["is_closed"] or listing["scenario"] == "CLOSED":
             return SubmitResult(command_status="FAILED", auction_status="CLOSED", note="Listing đã đóng")
-        key = (command.account_id, command.auction_id)
-        self._bid_state[key] = {
+        self._bid_state[_bid_key(command.account_id, command.auction_id)] = {
             "max_bid_jpy": command.max_bid_jpy,
             "outbid": listing["scenario"] == "OUTBID_AFTER_ACCEPT",
         }
+        self._save()
         return SubmitResult(
             command_status="SUCCEEDED",
             auction_status="BID_ACCEPTED",
@@ -128,12 +175,14 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def submit_buy_now(self, command) -> SubmitResult:
+        self._load()
         listing = self._listings[command.auction_id]
         if listing["scenario"] == "TIMEOUT":
             raise MockTimeoutError("Yahoo không phản hồi sau khi mua ngay")
         if listing["is_closed"] or listing["scenario"] == "CLOSED":
             return SubmitResult(command_status="FAILED", auction_status="CLOSED", note="Listing đã đóng")
         self._trade_counter += 1
+        self._save()
         return SubmitResult(
             command_status="SUCCEEDED",
             auction_status="WON",
@@ -143,6 +192,7 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def submit_store_checkout(self, command) -> SubmitResult:
+        self._load()
         listing = self._listings[command.auction_id]
         if listing["scenario"] == "TIMEOUT":
             raise MockTimeoutError("Yahoo không phản hồi khi checkout")
@@ -150,6 +200,7 @@ class MockYahooAdapter(YahooAdapter):
         if combined_payment_only and not getattr(command, "authorize_payment", False):
             return SubmitResult(command_status="FAILED", note="PAYMENT_AUTH_REQUIRED")
         self._trade_counter += 1
+        self._save()
         paid = combined_payment_only
         return SubmitResult(
             command_status="SUCCEEDED",
@@ -161,6 +212,7 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def submit_payment(self, command) -> SubmitResult:
+        self._load()
         listing = self._listings.get(command.auction_id, {"scenario": "SUCCESS"})
         if listing["scenario"] == "TIMEOUT":
             raise MockTimeoutError("Yahoo không phản hồi khi thanh toán")
@@ -180,9 +232,9 @@ class MockYahooAdapter(YahooAdapter):
         )
 
     def reconcile(self, command) -> ReconcileResult:
+        self._load()
         listing = self._listings.get(command.auction_id)
-        key = (command.account_id, command.auction_id)
-        bid = self._bid_state.get(key)
+        bid = self._bid_state.get(_bid_key(command.account_id, command.auction_id))
         if listing is not None and bid is not None and bid.get("outbid"):
             return ReconcileResult(
                 auction_status="LOST",

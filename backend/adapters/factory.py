@@ -11,7 +11,7 @@ def get_adapter() -> YahooAdapter:
     if settings.yahoo_adapter == "mock":
         from backend.adapters.mock.adapter import MockYahooAdapter
 
-        return MockYahooAdapter()
+        return MockYahooAdapter(state_file=settings.mock_adapter_state_file or None)
     if settings.yahoo_adapter == "yahoo":
         from backend.adapters.yahoo.adapter import YahooBrowserAdapter
 
