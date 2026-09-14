@@ -58,6 +58,14 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
   thật qua tunnel này** — không phải server local nữa: ghép cặp, xem
   preview, gửi lệnh dry-run `PLACE_BID`, worker trên VPS xử lý xong tới
   `DRY_RUN_SUCCEEDED`, budget reservation giải phóng đúng.
+- **Đã tự tay "Load unpacked" trong Chrome thật của người dùng và bấm thử
+  toàn bộ luồng qua tunnel VPS thật** (không còn qua Playwright) — cùng
+  kết quả `DRY_RUN_SUCCEEDED`. Việc này lộ ra một lỗi CSS thật:
+  `.checkbox-row { display: flex }` trong `popup.css` ghi đè thuộc tính
+  HTML `hidden` (author CSS luôn thắng UA stylesheet bất kể độ đặc hiệu),
+  khiến ô "Cấp quyền thanh toán..." (chỉ nên hiện cho `STORE_CHECKOUT`)
+  luôn hiện kể cả khi action là `PLACE_BID`. Đã sửa bằng rule toàn cục
+  `[hidden] { display: none !important; }` ở đầu `popup.css`.
 - Việc này lộ ra một giới hạn thật của mock adapter: API và worker là hai
   **tiến trình** riêng (đúng thiết kế mục 6, 9.3), nên `seed_listing()`
   gọi từ tiến trình API không tới được adapter mock trong tiến trình
@@ -80,9 +88,6 @@ idempotency/ngân sách/máy trạng thái/crash-recovery.**
 - Chưa đăng nhập Yahoo thật trên VPS (chưa cần vì chưa cài Chromium).
 - Chưa đặt giá, mua hay thanh toán thật. `LIVE_ACTIONS_ENABLED=false` theo
   mặc định và phải giữ vậy cho tới khi qua Cổng B với listing/account thật.
-- Extension chưa được **bạn** tự tay "Load unpacked" và bấm thử trong
-  Chrome bình thường của mình — mọi lần chạy tới giờ đều qua Playwright
-  tự động (dù đã nhắm vào VPS thật qua tunnel thật, xem phía trên).
 
 Xem mục 15–16 của đặc tả gốc để biết bảng kiểm thử và cổng nghiệm thu đầy
 đủ. Phần "Đã kiểm thử / chưa kiểm thử" ở cuối file này liệt kê chi tiết.
